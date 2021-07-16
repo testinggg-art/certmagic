@@ -125,23 +125,6 @@ func (cfg *Config) getCertificate(hello *tls.ClientHelloInfo) (cert Certificate,
 				return
 			}
 		}
-
-		// check the certCache directly to see if the SNI name is
-		// already the key of the certificate it wants; this implies
-		// that the SNI can contain the hash of a specific cert
-		// (chain) it wants and we will still be able to serve it up
-		// (this behavior, by the way, could be controversial as to
-		// whether it complies with RFC 6066 about SNI, but I think
-		// it does, soooo...)
-		// (this is how we solved the former ACME TLS-SNI challenge)
-		cfg.certCache.mu.RLock()
-		directCert, ok := cfg.certCache.cache[name]
-		cfg.certCache.mu.RUnlock()
-		if ok {
-			cert = directCert
-			matched = true
-			return
-		}
 	}
 
 	// otherwise, we're bingo on ammo; see issues
@@ -375,7 +358,7 @@ func (cfg *Config) obtainOnDemandCertificate(hello *tls.ClientHelloInfo) (Certif
 	defer cancel()
 
 	// Obtain the certificate
-	err = cfg.ObtainCert(ctx, name, false)
+	err = cfg.ObtainCertAsync(ctx, name)
 
 	// immediately unblock anyone waiting for it; doing this in
 	// a defer would risk deadlock because of the recursive call
@@ -520,7 +503,7 @@ func (cfg *Config) renewDynamicCertificate(hello *tls.ClientHelloInfo, currentCe
 	// Renew and reload the certificate
 	renewAndReload := func(ctx context.Context, cancel context.CancelFunc) (Certificate, error) {
 		defer cancel()
-		err = cfg.RenewCert(ctx, name, false)
+		err = cfg.RenewCertAsync(ctx, name, false)
 		if err == nil {
 			// even though the recursive nature of the dynamic cert loading
 			// would just call this function anyway, we do it here to
